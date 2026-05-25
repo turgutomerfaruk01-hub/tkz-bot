@@ -1,12 +1,16 @@
 import os
 import sqlite3
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# Railway Variables kısmına eklediğiniz BOT_TOKEN'ı buraya çeker
+# Railway Variables kısmından BOT_TOKEN'ı çeker
 TOKEN = os.getenv('BOT_TOKEN')
 
-# Veritabanı kurulumu
+# Loglama ayarı (Hataları görmek için)
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+# Veritabanı
 def init_db():
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
@@ -24,7 +28,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cursor = conn.cursor()
     cursor.execute('INSERT OR IGNORE INTO users (id, ref_points) VALUES (?, ?)', (user_id, 0))
     
-    # Referans sistemi: /start 123456 gibi gelirse puan ekle
     if args and args[0].isdigit():
         referrer_id = int(args[0])
         if referrer_id != user_id:
@@ -50,8 +53,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("GET SCRIPT (4p)", callback_data='add_4')],
         [InlineKeyboardButton("MY REF", callback_data='my_ref'), InlineKeyboardButton("MY REF LINK", callback_data='my_link')]
     ]
-    menu_name = query.data.replace('menu_', '').upper()
-    await query.edit_message_text(f"Menü: {menu_name}", reply_markup=InlineKeyboardMarkup(keyboard))
+    await query.edit_message_text(f"Menü: {query.data.replace('menu_', '').upper()}", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -65,23 +67,21 @@ async def points_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         points = int(query.data.split('_')[1])
         cursor.execute('UPDATE users SET ref_points = ref_points + ? WHERE id = ?', (points, user_id))
         conn.commit()
-        await query.message.reply_text(f"✅ {points} puan hesabına eklendi!")
+        await query.message.reply_text(f"✅ Hesabına {points} puan eklendi!")
     
     elif query.data == 'my_ref':
         cursor.execute('SELECT ref_points FROM users WHERE id = ?', (user_id,))
-        result = cursor.fetchone()
-        points = result[0] if result else 0
+        points = cursor.fetchone()[0]
         await query.message.reply_text(f"📊 Toplam referans puanın: {points}")
     
     elif query.data == 'my_link':
-        # Kullanıcı kendi referans linkini burada görür
         await query.message.reply_text(f"🔗 Referans Linkin:\nhttps://t.me/TKZFRRET00LBOT?start={user_id}")
     
     conn.close()
 
 if __name__ == '__main__':
     if not TOKEN:
-        print("HATA: BOT_TOKEN bulunamadı! Railway Variables kısmını kontrol edin.")
+        print("HATA: BOT_TOKEN değişkeni bulunamadı!")
     else:
         app = ApplicationBuilder().token(TOKEN).build()
         
@@ -89,5 +89,5 @@ if __name__ == '__main__':
         app.add_handler(CallbackQueryHandler(menu_handler, pattern='menu_.*'))
         app.add_handler(CallbackQueryHandler(points_handler, pattern='add_.*|my_ref|my_link'))
         
-        print("Bot başarıyla başlatıldı!")
+        print("Bot başarıyla başlatıldı ve çalışıyor!")
         app.run_polling()
